@@ -34,6 +34,11 @@ object TimeUsage extends TimeUsageInterface {
     val summaryDf = timeUsageSummary(primaryNeedsColumns, workColumns, otherColumns, initDf)
     val finalDf = timeUsageGrouped(summaryDf)
     finalDf.show()
+    //testing
+    //val summaryTypedDf = timeUsageSummaryTyped(summaryDf)
+    //val finalTypedDf = timeUsageGroupedTyped(summaryTypedDf)
+    //finalTypedDf.show()
+
   }
 
   /** @return The read DataFrame along with its column names. */
@@ -143,7 +148,7 @@ object TimeUsage extends TimeUsageInterface {
       .as("sex")
     val ageProjection: Column = when($"teage" >= 15 && $"teage" <= 22, "young")
       .when($"teage" >= 23 && $"teage" <= 55, "active")
-      .otherwise("elderly")
+      .otherwise("elder")
       .as("age")
 
     // Create columns that sum columns of the initial dataset
@@ -200,14 +205,7 @@ object TimeUsage extends TimeUsageInterface {
     * @param viewName Name of the SQL view to use
     */
   def timeUsageGroupedSqlQuery(viewName: String): String =
-    s"select working, sex, age" +
-      ",round(avg(primaryNeeds),1) as primaryNeeds" +
-      ",round(avg(work),1) as work" +
-      ",round(avg(other),1) as other" +
-      "from $viewName" +
-      "group by working, sex, age" +
-      "order by working, sex, age;"
-
+    s"SELECT working, sex, age, ROUND(AVG(primaryNeeds),1) as primaryNeeds, round(avg(work),1) as work, round(avg(other),1) as other from $viewName group by working, sex, age order by working, sex, age"
 
   /**
     * @return A `Dataset[TimeUsageRow]` from the “untyped” `DataFrame`
@@ -238,7 +236,13 @@ object TimeUsage extends TimeUsageInterface {
     */
   def timeUsageGroupedTyped(summed: Dataset[TimeUsageRow]): Dataset[TimeUsageRow] = {
     import org.apache.spark.sql.expressions.scalalang.typed
-    ???
+    def myRound(input: Double): Double = (input * 10).round / 10d
+    summed
+      .groupByKey(x => (x.working, x.sex, x.age))
+      .agg(typed.avg[TimeUsageRow](_.primaryNeeds), typed.avg[TimeUsageRow](_.work), typed.avg[TimeUsageRow](_.other))
+      .map{
+        case ((working, sex, age), primaryNeeds, work, other) => TimeUsageRow(working, sex, age, myRound(primaryNeeds), myRound(work), myRound(other))
+      }.orderBy($"working", $"sex", $"age")
   }
 }
 
